@@ -1,7 +1,7 @@
 ---
-name: workflow-auditor
+name: workflow-review
 description: |
-  工作流审计与重复模式发现 Skill。当用户有以下任何行为时触发：
+  工作流复盘与重复模式发现 Skill。当用户有以下任何行为时触发：
   - "帮我分析一下最近有哪些重复工作流"
   - "看看有什么可以打包成 skill"
   - "回顾一下我最近的工作模式"
@@ -27,7 +27,7 @@ metadata:
   short-description: 分析工作历史，发现重复模式，打包成最小有用技能
 ---
 
-# Workflow Auditor — 工作流审计与重复模式发现
+# Workflow Review — 工作流复盘与重复模式发现
 
 先回答一个问题：最近 30 天里，哪些重复手动流程值得被打包，以及应该打包成什么形式。
 
@@ -123,7 +123,7 @@ printf 'CLAUDE_ROOT=%s\nFACETS_DIR=%s\nSESSION_META_DIR=%s\nREPORT_PATH=%s\nPROJ
 
 > ⚠️ 未检测到官方 insights 结构化数据
 >
-> workflow-auditor 的高质量审计优先依赖官方 `/insights` 生成的 usage-data（facets、session-meta、report.html）。
+> workflow-review 的高质量复盘优先依赖官方 `/insights` 生成的 usage-data（facets、session-meta、report.html）。
 >
 > 现在卡住，不是报错，而是在等这份官方数据。
 > 如果没有它，也能继续，但只能做降级审计：证据会更弱，容易漏掉近期模式。
@@ -139,9 +139,9 @@ printf 'CLAUDE_ROOT=%s\nFACETS_DIR=%s\nSESSION_META_DIR=%s\nREPORT_PATH=%s\nPROJ
 > **a) 推荐：先跑 `/insights`**
 > 1. 在 Claude 里运行 `/insights`
 > 2. 等它生成 usage-data
-> 3. 再重新调用 workflow-auditor
+> 3. 再重新调用 workflow-review
 >
-> 说明：这不是“暂停后自动继续”。因为 `/insights` 会生成新数据，workflow-auditor 需要在新的一次调用里重新读取。
+> 说明：这不是“暂停后自动继续”。因为 `/insights` 会生成新数据，workflow-review 需要在新的一次调用里重新读取。
 >
 > **b) 继续降级审计**
 > 直接回复“继续降级审计”，我就改用 projects + 工作区 git + 可选 legacy transcripts 继续，但结果会更弱。
@@ -150,7 +150,7 @@ printf 'CLAUDE_ROOT=%s\nFACETS_DIR=%s\nSESSION_META_DIR=%s\nREPORT_PATH=%s\nPROJ
 
 如果用户选 **a**：
 
-- 明确告诉用户：请先运行 `/insights`，完成后重新调用 workflow-auditor。
+- 明确告诉用户：请先运行 `/insights`，完成后重新调用 workflow-review。
 - 不要再展开解释底层机制，除非用户追问“为什么不能自动继续”。
 - 当前 skill 到此结束，不进入降级流程。
 
@@ -307,7 +307,7 @@ git log --oneline --since="30 days ago" 2>/dev/null | head -20
 ## 验证方式
 
 本 Skill 工作正常的标志：
-- 能正确响应工作流审计请求
+- 能正确响应工作流复盘请求
 - 能正确检测 Claude Code 数据目录和各数据源的存在性
 - 当官方 usage-data 缺失时，能先阻断并要求用户在 `/insights` 与“继续降级审计”之间明确二选一
 - 产出清单后不会自动创建任何内容
