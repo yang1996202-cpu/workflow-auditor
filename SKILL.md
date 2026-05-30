@@ -162,42 +162,29 @@ printf 'CLAUDE_ROOT=%s\nFACETS_DIR=%s\nSESSION_META_DIR=%s\nREPORT_PATH=%s\nPROJ
 
 **A. facets**（语义层，首选）
 ```bash
-# 统计 30 天内 facets 总数（把 <facets-dir> 替换成 Step 0 输出的 FACETS_DIR）
+# 统计 30 天内数量（把 <facets-dir> 替换成 Step 0 输出的 FACETS_DIR）
 find "<facets-dir>" -maxdepth 1 -name "*.json" -mtime -30 2>/dev/null | wc -l
-
-# 按 underlying_goal 全量聚合（-mtime -30 覆盖完整 30 天，context 开销固定）
-find "<facets-dir>" -maxdepth 1 -name "*.json" -mtime -30 2>/dev/null | while read -r f; do
-  python3 -c "import json; d=json.load(open('$f')); print(d.get('underlying_goal','?')[:80])"
-done | sort | uniq -c | sort -rn | head -20
-
-# 按 friction_counts 全量聚合找高频摩擦点
-find "<facets-dir>" -maxdepth 1 -name "*.json" -mtime -30 2>/dev/null | while read -r f; do
-  python3 -c "import json; d=json.load(open('$f')); [print(k) for k in d.get('friction_counts',{}).keys()]"
-done | sort | uniq -c | sort -rn | head -10
-
-# session_type 分布（了解任务类型构成）
-find "<facets-dir>" -maxdepth 1 -name "*.json" -mtime -30 2>/dev/null | while read -r f; do
-  python3 -c "import json; d=json.load(open('$f')); print(d.get('session_type','?'))"
-done | sort | uniq -c | sort -rn
+# 提取 30 天内全部唯一 goal（去重后由 Claude 做语义归类；不用 uniq -c，避免措辞不同导致同类模式被打散）
+find "<facets-dir>" -maxdepth 1 -name "*.json" -mtime -30 2>/dev/null | \
+  xargs python3 -c "
+import json, sys
+for p in sys.argv[1:]:
+    try: print(json.load(open(p)).get('underlying_goal','').strip())
+    except: pass
+" | sort -u | head -80
+# 同期 session_type + brief_summary（补充语境，取最近 30 条）
+find "<facets-dir>" -maxdepth 1 -name "*.json" -mtime -30 -exec stat -f "%m %N" {} + 2>/dev/null | sort -rn | head -30 | cut -d' ' -f2- | while read -r f; do
+  python3 -c "import json; d=json.load(open('$f')); print(d.get('session_type','?'), '|', d.get('brief_summary','?')[:60])"
+done
+# 30 天内高频摩擦点（friction key 是离散枚举，uniq -c 不失真）
+find "<facets-dir>" -maxdepth 1 -name "*.json" -mtime -30 2>/dev/null | while read -r f; do python3 -c "import json; d=json.load(open('$f')); [print(k) for k in d.get('friction_counts',{}).keys()]"; done | sort | uniq -c | sort -rn | head -10
 ```
-
-> **原则**：先全量聚合，再按需抽样——不要先 `head -N` 截断再处理，否则样本覆盖不了完整 30 天。
 
 **B. session-meta**（结构层，补充 facets 没有的会话）
-```bash
-# 30 天内全量聚合 project_path，统计各工作目录活跃频次
-find "<session-meta-dir>" -maxdepth 1 -name "*.json" -mtime -30 2>/dev/null | while read -r f; do
-  python3 -c "import json; d=json.load(open('$f')); print(d.get('project_path','?'))"
-done | sort | uniq -c | sort -rn | head -15
-
-# first_prompt 全量聚合，发现高频起始任务
-find "<session-meta-dir>" -maxdepth 1 -name "*.json" -mtime -30 2>/dev/null | while read -r f; do
-  python3 -c "import json; d=json.load(open('$f')); print(d.get('first_prompt','?')[:60])"
-done | sort | uniq -c | sort -rn | head -15
-```
+- 取最近文件：`find "<session-meta-dir>" -maxdepth 1 -name "*.json" -exec stat -f "%m %N" {} + 2>/dev/null | sort -rn | head -30 | cut -d' ' -f2-`
+- 提取：`python3 -c "import json; d=json.load(open('FILE')); print(d.get('project_path'), d.get('first_prompt','')[:80])"`
+- 统计 session_type 分布：`find ... | while read f; do python3 -c "... d.get('session_type','?') ..."; done | sort | uniq -c | sort -rn`
 - 与 facets 按 session UUID（文件名）join 可得完整画像
-
-> **原则**：同 A——-mtime -30 覆盖完整窗口，用聚合代替截断，context 开销=统计结果行数而非文件数。
 
 **C. report.html**（综合叙述，辅助验证）
 - 存在且 ≤7天 → read_file 读取，忽略 `<style>`/`<script>` 标签，只看文字段落
@@ -328,7 +315,7 @@ git log --oneline --since="30 days ago" 2>/dev/null | head -20
 ## 验证方式
 
 本 Skill 工作正常的标志：
-- 能正确响应工作流复盘请求
+- 能正确响应工作流审计请求
 - 能正确检测 Claude Code 数据目录和各数据源的存在性
 - 当官方 usage-data 缺失时，能先阻断并要求用户在 `/insights` 与“继续降级审计”之间明确二选一
 - 产出清单后不会自动创建任何内容
